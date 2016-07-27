@@ -253,6 +253,193 @@ dripc_result drpipe_write__win32(drpipe pipe, const void* pData, size_t bytesToW
 //
 ///////////////////////////////////////////////////////////////////////////////
 #ifdef DR_IPC_UNIX
+
+#define DR_IPC_UNIX_PIPE_NAME_HEAD  "/tmp/"
+#define DR_IPC_UNIX_SERVER          (1 << 31)
+#define DR_IPC_UNIX_CLIENT          (1 << 30)
+
+typedef struct
+{
+    int fd;
+    unsigned int options;
+    char name[1];
+} drpipe_unix;
+
+static dripc_result dripc_result_from_unix_error(int error)
+{
+    switch (error)
+    {
+    default: return dripc_result_unknown_error;
+    }
+}
+
+static int dripc_options_to_fd_open_flags(unsigned int options)
+{
+    int flags = 0;
+    if (options & DR_IPC_READ) {
+        if (options & DR_IPC_WRITE) {
+            flags |= O_RDWR;
+        } else {
+            flags |= O_RDONLY;
+        }
+    } else {
+        if (options & DR_IPC_WRITE) {
+            flags |= O_WRONLY;
+        } else {
+            return dripc_result_invalid_args;   // Neither read nor write mode was specified.
+        }
+    }
+
+    if (options & DR_IPC_NOWAIT) {
+        flags |= O_NONBLOCK;
+    }
+
+    return flags;
+}
+
+dripc_result drpipe_open_named_server__unix(const char* name, unsigned int options, drpipe* pPipeOut)
+{
+    char nameUnix[256] = DR_IPC_UNIX_PIPE_NAME_HEAD;
+    if (strcat_s(nameUnix, sizeof(nameUnix), name) != 0) {
+        return dripc_result_name_too_long;
+    }
+
+    if (mkfifo(nameUnix, 0666) == -1) {
+        return dripc_result_from_unix_error(errno);
+    }
+
+
+    drpipe_unix* pPipeUnix = (drpipe_unix*)malloc(sizeof(*pPipeUnix) + strlen(nameUnix)+1);     // +1 for null terminator.
+    if (pPipeUnix == NULL) {
+        return dripc_result_unknown_error;
+    }
+
+    pPipeUnix->fd = -1;
+    pPipeUnix->options = options | DR_IPC_UNIX_SERVER;
+    strcpy(pPipeUnix->name, nameUnix);
+
+    *pPipeOut = (drpipe)pPipeUnix;
+    return dripc_result_success;
+}
+
+dripc_result drpipe_open_named_client__unix(const char* name, unsigned int options, drpipe* pPipeOut)
+{
+    char nameUnix[256] = DR_IPC_UNIX_PIPE_NAME_HEAD;
+    if (strcat_s(nameUnix, sizeof(nameUnix), name) != 0) {
+        return dripc_result_name_too_long;
+    }
+
+    drpipe_unix* pPipeUnix = (drpipe_unix*)malloc(sizeof(*pPipeUnix) + strlen(nameUnix)+1);     // +1 for null terminator.
+    if (pPipeUnix == NULL) {
+        return dripc_result_unknown_error;
+    }
+
+    pPipeUnix->options = options | DR_IPC_UNIX_CLIENT;
+    strcpy(pPipeUnix->name, nameUnix);
+
+    pPipeUnix->fd = open(nameUnix, dripc_options_to_fd_open_flags(options));
+    if (pPipeUnix->fd == -1) {
+        free(pPipeUnix);
+        return dripc_result_from_unix_error(errno);
+    }
+
+
+    *pPipeOut = (drpipe)pPipeUnix;
+    return dripc_result_success;
+}
+
+dripc_result drpipe_open_anonymous__unix(drpipe* pPipeRead, drpipe* pPipeWrite)
+{
+    drpipe_unix* pPipeReadUnix = (drpipe_unix*)calloc(1, sizeof(*pPipeReadUnix) + 1);
+    if (pPipeReadUnix == NULL) {
+        return dripc_result_unknown_error;
+    }
+
+    drpipe_unix* pPipeWriteUnix = (drpipe_unix*)calloc(1, sizeof(*pPipeWriteUnix) + 1);
+    if (pPipeWriteUnix == NULL) {
+        free(pPipeReadUnix);
+        return dripc_result_unknown_error;
+    }
+
+    int pipeFDs[2];
+    if (pipe(pipeFDs) == -1) {
+        free(pPipeWriteUnix);
+        free(pPipeReadUnix);
+        return dripc_result_from_unix_error(errno);
+    }
+
+    pPipeReadUnix->fd  = pipeFDs[0];
+    pPipeWriteUnix->fd = pipeFDs[1];
+
+    *pPipeRead = pPipeReadUnix;
+    *pPipeWrite = pPipeWriteUnix;
+
+    return dripc_result_success;
+}
+
+void drpipe_close__unix(drpipe pipe)
+{
+    drpipe_unix* pPipeUnix = (drpipe_unix*)pipe;
+
+    if (pPipeUnix->fd != -1) {
+        close(pPipeUnix->fd);
+    }
+
+    if (pPipeUnix->options & DR_IPC_UNIX_SERVER) {
+        unlink(pPipeUnix->name);
+    }
+}
+
+
+dripc_result drpipe_connect__unix(drpipe pipe)
+{
+    // Here is where we actually open the file. This should block until a client connects.
+    drpipe_unix* pPipeUnix = (drpipe_unix*)pipe;
+    if (pPipeUnix->fd != -1) {
+        return dripc_result_unknown_error;  // Alread have a connection.
+    }
+
+    pPipeUnix->fd = open(pPipeUnix->name, dripc_options_to_fd_open_flags(pPipeUnix->options));
+    if (pPipeUnix->fd == -1) {
+        return dripc_result_from_unix_error(errno);
+    }
+
+    return dripc_result_success;
+}
+
+dripc_result drpipe_wait_named__unix(const char* name, unsigned int timeoutInMilliseconds)
+{
+    (void)name;
+    (void)timeoutInMilliseconds;
+    return dripc_result_success;
+}
+
+
+dripc_result drpipe_read__unix(drpipe pipe, void* pDataOut, size_t bytesToRead, size_t* pBytesRead)
+{
+    drpipe_unix* pPipeUnix = (drpipe_unix*)pipe;
+
+    ssize_t bytesRead = read(pPipeUnix->fd, pDataOut, bytesToRead);
+    if (bytesRead == -1) {
+        return dripc_result_from_unix_error(errno);
+    }
+
+    *pBytesRead = (size_t)bytesRead;
+    return dripc_result_success;
+}
+
+dripc_result drpipe_write__unix(drpipe pipe, const void* pData, size_t bytesToWrite, size_t* pBytesWritten)
+{
+    drpipe_unix* pPipeUnix = (drpipe_unix*)pipe;
+
+    ssize_t bytesWritten = write(pPipeUnix->fd, pData, bytesToWrite);
+    if (bytesWritten == -1) {
+        return dripc_result_from_unix_error(errno);
+    }
+
+    *pBytesWritten = (size_t)bytesWritten;
+    return dripc_result_success;
+}
 #endif  // Unix
 
 dripc_result drpipe_open_named_server(const char* name, unsigned int options, drpipe* pPipeOut)
