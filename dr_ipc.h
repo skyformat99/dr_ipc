@@ -19,6 +19,8 @@
 #ifndef dr_ipc_h
 #define dr_ipc_h
 
+#include <stddef.h> // For size_t
+
 #ifdef __cplusplus
 extern "C" {
 #endif
@@ -51,6 +53,8 @@ void drpipe_close(drpipe pipe);
 dripc_result drpipe_wait_named(const char* name, unsigned int timeoutInMilliseconds);
 
 dripc_result drpipe_read(drpipe pipe, void* pDataOut, size_t bytesToRead, size_t* pBytesRead);
+dripc_result drpipe_read_exact(drpipe pipe, void* pDataOut, size_t bytesToRead, size_t* pBytesRead);
+
 dripc_result drpipe_write(drpipe pipe, const void* pData, size_t bytesToWrite, size_t* pBytesWritten);
 
 #ifdef __cplusplus
@@ -329,6 +333,8 @@ dripc_result drpipe_wait_named(const char* name, unsigned int timeoutInMilliseco
 
 dripc_result drpipe_read(drpipe pipe, void* pDataOut, size_t bytesToRead, size_t* pBytesRead)
 {
+    if (pBytesRead) *pBytesRead = 0;
+
     if (pipe == NULL || pDataOut == NULL) {
         return dripc_result_invalid_args;
     }
@@ -337,8 +343,6 @@ dripc_result drpipe_read(drpipe pipe, void* pDataOut, size_t bytesToRead, size_t
     if (bytesToRead > 0x7FFFFFFF) {
         return dripc_result_invalid_args;
     }
-
-    *pBytesRead = 0;
 
 
 #ifdef DR_IPC_WIN32
@@ -350,8 +354,31 @@ dripc_result drpipe_read(drpipe pipe, void* pDataOut, size_t bytesToRead, size_t
 #endif
 }
 
+dripc_result drpipe_read_exact(drpipe pipe, void* pDataOut, size_t bytesToRead, size_t* pBytesRead)
+{
+    if (pBytesRead) *pBytesRead = 0;
+
+    while (bytesToRead > 0) {
+        size_t bytesRead;
+        dripc_result result = drpipe_read(pipe, pDataOut, (bytesToRead <= 0x7FFFFFFF) ? bytesToRead : 0x7FFFFFFF, &bytesRead);
+        if (result != dripc_result_success) {
+            return result;
+        }
+
+        pDataOut = (void*)((char*)pDataOut + bytesRead);
+
+        bytesToRead -= bytesRead;
+        if (pBytesRead) *pBytesRead += bytesRead;
+    }
+
+    return dripc_result_success;
+}
+
+
 dripc_result drpipe_write(drpipe pipe, const void* pData, size_t bytesToWrite, size_t* pBytesWritten)
 {
+    if (pBytesWritten) *pBytesWritten = 0;
+
     if (pipe == NULL || pData == NULL) {
         return dripc_result_invalid_args;
     }
@@ -360,8 +387,6 @@ dripc_result drpipe_write(drpipe pipe, const void* pData, size_t bytesToWrite, s
     if (bytesToWrite > 0x7FFFFFFF) {
         return dripc_result_invalid_args;
     }
-
-    *pBytesWritten = 0;
 
 
 #ifdef DR_IPC_WIN32
