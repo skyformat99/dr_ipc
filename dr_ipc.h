@@ -50,6 +50,8 @@ dripc_result drpipe_open_named_client(const char* name, unsigned int options, dr
 dripc_result drpipe_open_anonymous(drpipe* pPipeRead, drpipe* pPipeWrite);
 void drpipe_close(drpipe pipe);
 
+// Waits for a client to connect to the given named server piped. This does not return until a client has connected.
+dripc_result drpipe_connect(drpipe pipe);
 dripc_result drpipe_wait_named(const char* name, unsigned int timeoutInMilliseconds);
 
 dripc_result drpipe_read(drpipe pipe, void* pDataOut, size_t bytesToRead, size_t* pBytesRead);
@@ -193,6 +195,15 @@ void drpipe_close__win32(drpipe pipe)
 }
 
 
+dripc_result drpipe_connect__win32(drpipe pipe)
+{
+    if (!ConnectNamedPipe(pipe, NULL)) {
+        return dripc_result_from_win32_error(GetLastError());
+    }
+
+    return dripc_result_success;
+}
+
 dripc_result drpipe_wait_named__win32(const char* name, unsigned int timeoutInMilliseconds)
 {
     char nameWin32[256] = DR_IPC_WIN32_PIPE_NAME_HEAD;
@@ -314,6 +325,17 @@ void drpipe_close(drpipe pipe)
 #endif
 }
 
+
+dripc_result drpipe_connect(drpipe pipe)
+{
+#ifdef DR_IPC_WIN32
+    return drpipe_connect__win32(pipe);
+#endif
+
+#ifdef DR_IPC_UNIX
+    return drpipe_connect__unix(pipe);
+#endif
+}
 
 dripc_result drpipe_wait_named(const char* name, unsigned int timeoutInMilliseconds)
 {
