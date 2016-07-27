@@ -59,6 +59,8 @@ dripc_result drpipe_read_exact(drpipe pipe, void* pDataOut, size_t bytesToRead, 
 
 dripc_result drpipe_write(drpipe pipe, const void* pData, size_t bytesToWrite, size_t* pBytesWritten);
 
+size_t drpipe_get_translated_name(const char* name, char* nameOut, size_t nameOutSize);
+
 #ifdef __cplusplus
 }
 #endif
@@ -243,6 +245,24 @@ dripc_result drpipe_write__win32(drpipe pipe, const void* pData, size_t bytesToW
 
     *pBytesWritten = dwBytesWritten;
     return dripc_result_success;
+}
+
+size_t drpipe_get_translated_name__win32(const char* name, char* nameOut, size_t nameOutSize)
+{
+    if (nameOut != NULL && nameOutSize == 0) {
+        return 0;
+    }
+
+    char nameWin32[256] = DR_IPC_WIN32_PIPE_NAME_HEAD;
+    if (strcat_s(nameWin32, sizeof(nameWin32), name) != 0) {
+        return dripc_result_name_too_long;
+    }
+
+    if (nameOut != NULL) {
+        strcpy_s(nameOut, nameOutSize, nameWin32);
+    }
+
+    return strlen(nameWin32);
 }
 #endif  // Win32
 
@@ -440,6 +460,24 @@ dripc_result drpipe_write__unix(drpipe pipe, const void* pData, size_t bytesToWr
     *pBytesWritten = (size_t)bytesWritten;
     return dripc_result_success;
 }
+
+size_t drpipe_get_translated_name__unix(const char* name, char* nameOut, size_t nameOutSize)
+{
+    if (nameOut != NULL && nameOutSize == 0) {
+        return 0;
+    }
+
+    char nameUnix[256] = DR_IPC_UNIX_PIPE_NAME_HEAD;
+    if (strcat_s(nameUnix, sizeof(nameUnix), name) != 0) {
+        return dripc_result_name_too_long;
+    }
+
+    if (nameOut != NULL) {
+        strcpy_s(nameOut, nameOutSize, nameUnix);
+    }
+
+    return strlen(nameUnix);
+}
 #endif  // Unix
 
 dripc_result drpipe_open_named_server(const char* name, unsigned int options, drpipe* pPipeOut)
@@ -604,6 +642,22 @@ dripc_result drpipe_write(drpipe pipe, const void* pData, size_t bytesToWrite, s
 
 #ifdef DR_IPC_UNIX
     return drpipe_write__unix(pipe, pData, bytesToWrite, pBytesWritten);
+#endif
+}
+
+
+size_t drpipe_get_translated_name(const char* name, char* nameOut, size_t nameOutSize)
+{
+    if (name == NULL) {
+        return 0;
+    }
+
+#ifdef DR_IPC_WIN32
+    return drpipe_get_translated_name__win32(name, nameOut, nameOutSize);
+#endif
+
+#ifdef DR_IPC_UNIX
+    return drpipe_get_translated_name__unix(name, nameOut, nameOutSize);
 #endif
 }
 
