@@ -15,6 +15,7 @@
 //
 // QUICK NOTES
 // - Currently, only pipes have been implemented. Sockets will be coming soon.
+// - Non-blocking pipes are not supported.
 
 #ifndef dr_ipc_h
 #define dr_ipc_h
@@ -46,15 +47,37 @@ typedef enum
 
 // Opens a server-side pipe. This will block until a client is connected.
 dripc_result drpipe_open_named_server(const char* name, unsigned int options, drpipe* pPipeOut);
+
+// Opens the client-side end of a named pipe.
 dripc_result drpipe_open_named_client(const char* name, unsigned int options, drpipe* pPipeOut);
+
+// Opens an anonymous pipe.
 dripc_result drpipe_open_anonymous(drpipe* pPipeRead, drpipe* pPipeWrite);
+
+// Closes a pipe opened with drpipe_open_named_server(), drpipe_open_named_client() or drpipe_open_anonymous().
 void drpipe_close(drpipe pipe);
 
+
+// Reads data from a pipe.
+//
+// This is a blocking call.
 dripc_result drpipe_read(drpipe pipe, void* pDataOut, size_t bytesToRead, size_t* pBytesRead);
+
+// Reads data from a pipe and does not return until either an error occurs or exactly the number of requested bytes have been read.
+//
+// This is a blocking call.
 dripc_result drpipe_read_exact(drpipe pipe, void* pDataOut, size_t bytesToRead, size_t* pBytesRead);
 
+
+// Writes data to a pipe.
+//
+// This blocks until the data has been written.
 dripc_result drpipe_write(drpipe pipe, const void* pData, size_t bytesToWrite, size_t* pBytesWritten);
 
+
+// Internally, dr_ipc needs to translate the name of a pipe to a platform-specific name. This function returns that internal name.
+//
+// Returns the length of the name. If nameOut is NULL the return value is the required size, not including the null terminator.
 size_t drpipe_get_translated_name(const char* name, char* nameOut, size_t nameOutSize);
 
 #ifdef __cplusplus
@@ -259,7 +282,10 @@ size_t drpipe_get_translated_name__win32(const char* name, char* nameOut, size_t
 ///////////////////////////////////////////////////////////////////////////////
 #ifdef DR_IPC_UNIX
 
+#ifndef DR_IPC_UNIX_PIPE_NAME_HEAD
 #define DR_IPC_UNIX_PIPE_NAME_HEAD  "/tmp/"
+#endif
+
 #define DR_IPC_UNIX_SERVER          (1 << 31)
 #define DR_IPC_UNIX_CLIENT          (1 << 30)
 
