@@ -226,7 +226,7 @@ dripc_result drpipe_read__win32(drpipe pipe, void* pDataOut, size_t bytesToRead,
     HANDLE hPipe = DR_IPC_PIPE_TO_WIN32_HANDLE(pipe);
 
     DWORD dwBytesRead;
-    if (!ReadFile(hPipe, pDataOut, bytesToRead, &dwBytesRead, NULL)) {
+    if (!ReadFile(hPipe, pDataOut, (DWORD)bytesToRead, &dwBytesRead, NULL)) {
         return dripc_result_from_win32_error(GetLastError());
     }
 
@@ -239,7 +239,7 @@ dripc_result drpipe_write__win32(drpipe pipe, const void* pData, size_t bytesToW
     HANDLE hPipe = DR_IPC_PIPE_TO_WIN32_HANDLE(pipe);
 
     DWORD dwBytesWritten;
-    if (!WriteFile(hPipe, pData, bytesToWrite, &dwBytesWritten, NULL)) {
+    if (!WriteFile(hPipe, pData, (DWORD)bytesToWrite, &dwBytesWritten, NULL)) {
         return dripc_result_from_win32_error(GetLastError());
     }
 
