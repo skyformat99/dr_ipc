@@ -319,8 +319,8 @@ static int dripc_options_to_fd_open_flags(unsigned int options)
 
 dripc_result drpipe_open_named_server__unix(const char* name, unsigned int options, drpipe* pPipeOut)
 {
-    char nameUnix[256] = DR_IPC_UNIX_PIPE_NAME_HEAD;
-    if (strcat_s(nameUnix, sizeof(nameUnix), name) != 0) {
+    char nameUnix[512];
+    if (drpipe_get_translated_name(name, nameUnix, sizeof(nameUnix)) == 0) {
         return dripc_result_name_too_long;
     }
 
@@ -344,8 +344,8 @@ dripc_result drpipe_open_named_server__unix(const char* name, unsigned int optio
 
 dripc_result drpipe_open_named_client__unix(const char* name, unsigned int options, drpipe* pPipeOut)
 {
-    char nameUnix[256] = DR_IPC_UNIX_PIPE_NAME_HEAD;
-    if (strcat_s(nameUnix, sizeof(nameUnix), name) != 0) {
+    char nameUnix[512];
+    if (drpipe_get_translated_name(name, nameUnix, sizeof(nameUnix)) == 0) {
         return dripc_result_name_too_long;
     }
 
@@ -467,13 +467,16 @@ size_t drpipe_get_translated_name__unix(const char* name, char* nameOut, size_t 
         return 0;
     }
 
-    char nameUnix[256] = DR_IPC_UNIX_PIPE_NAME_HEAD;
+    char nameUnix[512];
+    if (strcpy_s(nameUnix, sizeof(nameUnix), DR_IPC_UNIX_PIPE_NAME_HEAD) != 0) {
+        return 0;
+    }
     if (strcat_s(nameUnix, sizeof(nameUnix), name) != 0) {
-        return dripc_result_name_too_long;
+        return 0;
     }
 
-    if (nameOut != NULL) {
-        strcpy_s(nameOut, nameOutSize, nameUnix);
+    if (strcpy_s(nameOut, nameOutSize, nameUnix) != 0) {
+        return 0;
     }
 
     return strlen(nameUnix);
