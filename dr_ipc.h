@@ -31,7 +31,6 @@ typedef void* drpipe;
 
 #define DR_IPC_READ     0x01
 #define DR_IPC_WRITE    0x02
-#define DR_IPC_NOWAIT   0x04
 
 #define DR_IPC_INFINITE 0xFFFFFFFF
 
@@ -125,12 +124,7 @@ dripc_result drpipe_open_named_server__win32(const char* name, unsigned int opti
         }
     }
 
-    DWORD dwPipeMode = PIPE_TYPE_BYTE | PIPE_READMODE_BYTE;
-    if (options & DR_IPC_NOWAIT) {
-        dwPipeMode |= PIPE_NOWAIT;
-    }
-
-    HANDLE hPipeWin32 = CreateNamedPipeA(nameWin32, dwOpenMode, dwPipeMode, PIPE_UNLIMITED_INSTANCES, DR_IPC_WIN32_PIPE_BUFFER_SIZE, DR_IPC_WIN32_PIPE_BUFFER_SIZE, NMPWAIT_USE_DEFAULT_WAIT, NULL);
+    HANDLE hPipeWin32 = CreateNamedPipeA(nameWin32, dwOpenMode, PIPE_TYPE_BYTE | PIPE_READMODE_BYTE | PIPE_WAIT, PIPE_UNLIMITED_INSTANCES, DR_IPC_WIN32_PIPE_BUFFER_SIZE, DR_IPC_WIN32_PIPE_BUFFER_SIZE, NMPWAIT_USE_DEFAULT_WAIT, NULL);
     if (hPipeWin32 == INVALID_HANDLE_VALUE) {
         return dripc_result_from_win32_error(GetLastError());
     }
@@ -299,10 +293,6 @@ static int dripc_options_to_fd_open_flags(unsigned int options)
         } else {
             return dripc_result_invalid_args;   // Neither read nor write mode was specified.
         }
-    }
-
-    if (options & DR_IPC_NOWAIT) {
-        flags |= O_NONBLOCK;
     }
 
     return flags;
