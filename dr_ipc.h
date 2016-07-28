@@ -45,13 +45,11 @@ typedef enum
     dripc_result_timeout
 } dripc_result;
 
+// Opens a server-side pipe. This will block until a client is connected.
 dripc_result drpipe_open_named_server(const char* name, unsigned int options, drpipe* pPipeOut);
 dripc_result drpipe_open_named_client(const char* name, unsigned int options, drpipe* pPipeOut);
 dripc_result drpipe_open_anonymous(drpipe* pPipeRead, drpipe* pPipeWrite);
 void drpipe_close(drpipe pipe);
-
-// Waits for a client to connect to the given named server piped. This does not return until a client has connected.
-dripc_result drpipe_connect(drpipe pipe);
 
 dripc_result drpipe_read(drpipe pipe, void* pDataOut, size_t bytesToRead, size_t* pBytesRead);
 dripc_result drpipe_read_exact(drpipe pipe, void* pDataOut, size_t bytesToRead, size_t* pBytesRead);
@@ -136,6 +134,14 @@ dripc_result drpipe_open_named_server__win32(const char* name, unsigned int opti
     if (hPipeWin32 == INVALID_HANDLE_VALUE) {
         return dripc_result_from_win32_error(GetLastError());
     }
+
+
+    // Wait for a client to connect...
+    if (!ConnectNamedPipe(hPipeWin32, NULL)) {
+        CloseHandle(hPipeWin32);
+        return dripc_result_from_win32_error(GetLastError());
+    }
+
 
     *pPipeOut = DR_IPC_WIN32_HANDLE_TO_PIPE(hPipeWin32);
     return dripc_result_success;
@@ -319,9 +325,16 @@ dripc_result drpipe_open_named_server__unix(const char* name, unsigned int optio
         return dripc_result_unknown_error;
     }
 
-    pPipeUnix->fd = -1;
     pPipeUnix->options = options | DR_IPC_UNIX_SERVER;
     strcpy(pPipeUnix->name, nameUnix);
+
+
+    // Wait for a client to connect...
+    pPipeUnix->fd = open(pPipeUnix->name, dripc_options_to_fd_open_flags(pPipeUnix->options));
+    if (pPipeUnix->fd == -1) {
+        return dripc_result_from_unix_error(errno);
+    }
+
 
     *pPipeOut = (drpipe)pPipeUnix;
     return dripc_result_success;
@@ -393,23 +406,6 @@ void drpipe_close__unix(drpipe pipe)
     if (pPipeUnix->options & DR_IPC_UNIX_SERVER) {
         unlink(pPipeUnix->name);
     }
-}
-
-
-dripc_result drpipe_connect__unix(drpipe pipe)
-{
-    // Here is where we actually open the file. This should block until a client connects.
-    drpipe_unix* pPipeUnix = (drpipe_unix*)pipe;
-    if (pPipeUnix->fd != -1) {
-        return dripc_result_unknown_error;  // Alread have a connection.
-    }
-
-    pPipeUnix->fd = open(pPipeUnix->name, dripc_options_to_fd_open_flags(pPipeUnix->options));
-    if (pPipeUnix->fd == -1) {
-        return dripc_result_from_unix_error(errno);
-    }
-
-    return dripc_result_success;
 }
 
 
@@ -528,18 +524,6 @@ void drpipe_close(drpipe pipe)
 
 #ifdef DR_IPC_UNIX
     drpipe_close__unix(pipe);
-#endif
-}
-
-
-dripc_result drpipe_connect(drpipe pipe)
-{
-#ifdef DR_IPC_WIN32
-    return drpipe_connect__win32(pipe);
-#endif
-
-#ifdef DR_IPC_UNIX
-    return drpipe_connect__unix(pipe);
 #endif
 }
 
