@@ -1,5 +1,5 @@
 // Interprocess communication. Public Domain. See "unlicense" statement at the end of this file.
-// dr_webgen - v0.0 - unreleased
+// dr_ipc - v0.1 - 31/07/2016
 //
 // David Reid - mackron@gmail.com
 
@@ -667,6 +667,12 @@ size_t drpipe_get_translated_name(const char* name, char* nameOut, size_t nameOu
 }
 
 #endif  // DR_IPC_IMPLEMENTATION
+
+
+// REVISION HISTORY
+//
+// v0.1 - 31/07/2016
+//   - Initial versioned release.
 
 
 /*
