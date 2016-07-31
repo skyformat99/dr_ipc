@@ -12,6 +12,39 @@
 // You can then #include this file in other parts of the program as you would with any other header file.
 //
 //
+// --- Pipes ---
+//
+// For named pipes, dr_ipc uses the notion of a server and client. The server is the one who initially creates the
+// pipe and the client is the one who connects after the fact. To create ther server-side end of a named pipe, do
+// something like the following:
+//
+//   drpipe serverPipe;
+//   dripc_result result = drpipe_open_named_server("my_pipe_name", DR_IPC_READ | DR_IPC_WRITE, &serverPipe);
+//   if (result != dripc_success) {
+//       return -1;
+//   }
+//
+// The above function will block until a client is connected on the other end of the pipe so you will likely want to
+// do this on a separate thread. Connecting on the client side is very similar:
+//
+//   drpipe clientPipe;
+//   dripc_result result = drpipe_open_named_client("my_pipe_name", DR_IPC_READ | DR_IPC_WRITE, &clientPipe);
+//   if (result != dripc_success) {
+//       return -1;
+//   }
+//
+// To read and write data, use drpipe_read() and drpipe_write() respectively. These functions are both blocking. You
+// can also use drpipe_read_exact() to continuously read bytes until exactly the number of bytes requested have been
+// read.
+//
+// Internally, for all platforms, the name of the pipe is translated to a platform-specific name. To get this name,
+// use the drpipe_get_translated_name() API. On *nix platforms the pipe will be named as "/tmp/{your pipe name}" by
+// default. This can be changed by #define-ing DR_IPC_UNIX_PIPE_NAME_HEAD before #include-ing this file.
+//
+// An anonymous pipe can be created with the drpipe_open_anonymous() API.
+// 
+//
+//
 //
 // QUICK NOTES
 // - Currently, only pipes have been implemented. Sockets will be coming soon.
@@ -45,10 +78,15 @@ typedef enum
     dripc_result_timeout
 } dripc_result;
 
-// Opens a server-side pipe. This will block until a client is connected.
+// Opens a server-side pipe.
+//
+// This will block until a client is connected. On *nix platforms the pipe will be named as "/tmp/{name}" by default, but
+// it can be changed by #define-ing DR_IPC_UNIX_PIPE_NAME_HEAD before including the implementation of dr_ipc.h.
 dripc_result drpipe_open_named_server(const char* name, unsigned int options, drpipe* pPipeOut);
 
 // Opens the client-side end of a named pipe.
+//
+// If the server-side end of the pipe does not exist, this will fail.
 dripc_result drpipe_open_named_client(const char* name, unsigned int options, drpipe* pPipeOut);
 
 // Opens an anonymous pipe.
@@ -60,7 +98,8 @@ void drpipe_close(drpipe pipe);
 
 // Reads data from a pipe.
 //
-// This is a blocking call.
+// This is a blocking call, and may not return the exact number of bytes requested. In addition, it is not guaranteed that
+// writes from one end of the pipe is atomic.
 dripc_result drpipe_read(drpipe pipe, void* pDataOut, size_t bytesToRead, size_t* pBytesRead);
 
 // Reads data from a pipe and does not return until either an error occurs or exactly the number of requested bytes have been read.
